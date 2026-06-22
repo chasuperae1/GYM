@@ -157,10 +157,48 @@ class TrainingSkill:
         
         result += print_workout_str(self.workout_id)
         
-        result += "\n\n🎉 训练记录保存成功！\n\n是否需要更新身体数据？（是/否）"
+        sync_result = self.sync_to_github()
+        result += "\n\n" + sync_result
+        
+        result += "\n🎉 训练记录保存成功！\n\n是否需要更新身体数据？（是/否）"
         self.state = "asking_measurement"
         
         return result
+    
+    def sync_to_github(self):
+        """自动同步数据库到 GitHub"""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["git", "add", "fitness.db"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0:
+                return f"⚠️  Git add 失败: {result.stderr}"
+            
+            result = subprocess.run(
+                ["git", "commit", "-m", f"训练记录: {self.workout_data['date']} {self.workout_data['split']}"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result.returncode != 0 and "nothing to commit" not in result.stderr:
+                return f"⚠️  Git commit 失败: {result.stderr}"
+            
+            result = subprocess.run(
+                ["git", "push", "origin", "trae/solo-agent-1hq0no"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode == 0:
+                return "✅ 已自动同步到 GitHub"
+            else:
+                return f"⚠️  Git push 失败: {result.stderr}"
+        except Exception as e:
+            return f"⚠️  同步失败: {str(e)}"
     
     def add_measurement(self, weight, chest=None, waist=None, arm=None, thigh=None):
         add_measurement(
@@ -171,8 +209,10 @@ class TrainingSkill:
             arm_cm=arm,
             thigh_cm=thigh,
         )
+        self.sync_to_github()
         self.reset()
         return "✅ 身体数据已更新！"
+        
 
 def print_workout_str(workout_id):
     from fitness_tool import get_workout
