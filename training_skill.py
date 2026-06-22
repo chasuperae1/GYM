@@ -320,7 +320,13 @@ class TrainingSkill:
                 f"脂肪{round(total_fat,1)}g 热量{round(total_calories,0)}kcal")
     
     def get_meal_type(self):
-        hour = datetime.now().hour
+        """使用北京时间判断餐次"""
+        from datetime import timezone, timedelta
+        utc_now = datetime.now(timezone.utc)
+        beijing_tz = timezone(timedelta(hours=8))
+        beijing_now = utc_now.astimezone(beijing_tz)
+        hour = beijing_now.hour
+        
         if 6 <= hour < 10:
             return "早餐"
         elif 10 <= hour < 14:

@@ -84,13 +84,33 @@ def add_food(name, category, carbs_g, protein_g, fat_g, calories, serving_size_g
     conn.commit()
     conn.close()
 
+def get_beijing_time():
+    """获取北京时间（UTC+8）"""
+    return datetime.now().astimezone()
+
+def get_beijing_hour():
+    """获取北京时间的小时数"""
+    from datetime import timezone, timedelta
+    utc_now = datetime.now(timezone.utc)
+    beijing_tz = timezone(timedelta(hours=8))
+    beijing_now = utc_now.astimezone(beijing_tz)
+    return beijing_now.hour
+
+def get_beijing_datetime_str():
+    """获取北京时间字符串 YYYY-MM-DD HH:MM"""
+    from datetime import timezone, timedelta
+    utc_now = datetime.now(timezone.utc)
+    beijing_tz = timezone(timedelta(hours=8))
+    beijing_now = utc_now.astimezone(beijing_tz)
+    return beijing_now.strftime("%Y-%m-%d %H:%M")
+
 def add_meal(meal_time=None, meal_type=None, notes="", photo_ref=""):
     """添加一餐记录，返回 meal_id"""
     if meal_time is None:
-        meal_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+        meal_time = get_beijing_datetime_str()
     
     if meal_type is None:
-        hour = datetime.now().hour
+        hour = get_beijing_hour()
         if 6 <= hour < 10:
             meal_type = "早餐"
         elif 10 <= hour < 14:
