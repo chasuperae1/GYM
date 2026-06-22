@@ -1,0 +1,12 @@
+{
+    "name": "健身追踪器",
+    "description": "记录训练与饮食，自动同步到 GitHub",
+    "version": "1.0.0",
+    "author": "Fitness Tracker",
+    "tags": ["健身", "训练", "饮食", "营养", "肌肥大"],
+    "entry": "main.py",
+    "icon": "icon.png",
+    "type": "conversation",
+    "permissions": [],
+    "settings": {}
+}
