@@ -70,6 +70,132 @@ def add_measurement(measure_date, weight_kg=None, body_fat=None,
     conn.close()
 
 
+# ---------------- 饮食记录功能 ----------------
+
+def add_food(name, category, carbs_g, protein_g, fat_g, calories, serving_size_g=100, notes=""):
+    """添加食物到食物库"""
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO foods (name, category, carbs_g, protein_g, fat_g, calories, serving_size_g, notes) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (name, category, carbs_g, protein_g, fat_g, calories, serving_size_g, notes),
+    )
+    conn.commit()
+    conn.close()
+
+def add_meal(meal_time=None, meal_type=None, notes="", photo_ref=""):
+    """添加一餐记录，返回 meal_id"""
+    if meal_time is None:
+        meal_time = datetime.now().strftime("%Y-%m-%d %H:%M")
+    
+    if meal_type is None:
+        hour = datetime.now().hour
+        if 6 <= hour < 10:
+            meal_type = "早餐"
+        elif 10 <= hour < 14:
+            meal_type = "午餐"
+        elif 14 <= hour < 18:
+            meal_type = "下午茶"
+        elif 18 <= hour < 22:
+            meal_type = "晚餐"
+        else:
+            meal_type = "宵夜"
+    
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO meals (meal_time, meal_type, notes, photo_ref) VALUES (?, ?, ?, ?)",
+        (meal_time, meal_type, notes, photo_ref),
+    )
+    conn.commit()
+    new_id = cur.lastrowid
+    conn.close()
+    return new_id
+
+def add_meal_item(meal_id, food_name, quantity_g, notes=""):
+    """为一餐添加食物"""
+    conn = _connect()
+    cur = conn.cursor()
+    row = cur.execute("SELECT id FROM foods WHERE name = ?", (food_name,)).fetchone()
+    if not row:
+        return None, f"未找到食物「{food_name}」"
+    
+    food_id = row["id"]
+    cur.execute(
+        "INSERT INTO meal_items (meal_id, food_id, quantity_g, notes) VALUES (?, ?, ?, ?)",
+        (meal_id, food_id, quantity_g, notes),
+    )
+    conn.commit()
+    conn.close()
+    return food_id, None
+
+def list_foods(category=None):
+    """列出食物库"""
+    conn = _connect()
+    cur = conn.cursor()
+    if category:
+        rows = cur.execute(
+            "SELECT id, name, category, carbs_g, protein_g, fat_g, calories, serving_size_g FROM foods "
+            "WHERE category = ? ORDER BY name",
+            (category,),
+        ).fetchall()
+    else:
+        rows = cur.execute(
+            "SELECT id, name, category, carbs_g, protein_g, fat_g, calories, serving_size_g FROM foods "
+            "ORDER BY category, name"
+        ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_daily_nutrition(date_str=None):
+    """获取某天的营养摄入统计"""
+    if date_str is None:
+        date_str = datetime.now().strftime("%Y-%m-%d")
+    
+    conn = _connect()
+    cur = conn.cursor()
+    rows = cur.execute(
+        """
+        SELECT f.name, f.category, SUM(mi.quantity_g) as total_g,
+               SUM(mi.quantity_g * f.carbs_g / 100) as carbs_g,
+               SUM(mi.quantity_g * f.protein_g / 100) as protein_g,
+               SUM(mi.quantity_g * f.fat_g / 100) as fat_g,
+               SUM(mi.quantity_g * f.calories / 100) as calories,
+               m.meal_type, m.meal_time
+        FROM meals m
+        JOIN meal_items mi ON m.id = mi.meal_id
+        JOIN foods f ON mi.food_id = f.id
+        WHERE m.meal_time LIKE ?
+        GROUP BY m.id, f.id
+        ORDER BY m.meal_time, f.name
+        """,
+        (f"{date_str}%",),
+    ).fetchall()
+    conn.close()
+    
+    meals = defaultdict(list)
+    totals = {"carbs": 0, "protein": 0, "fat": 0, "calories": 0}
+    
+    for r in rows:
+        meal_key = f"{r['meal_time']} {r['meal_type']}"
+        meals[meal_key].append({
+            "food": r["name"],
+            "category": r["category"],
+            "quantity": round(r["total_g"], 1),
+            "carbs": round(r["carbs_g"], 1),
+            "protein": round(r["protein_g"], 1),
+            "fat": round(r["fat_g"], 1),
+            "calories": round(r["calories"], 0),
+        })
+        totals["carbs"] += r["carbs_g"]
+        totals["protein"] += r["protein_g"]
+        totals["fat"] += r["fat_g"]
+        totals["calories"] += r["calories"]
+    
+    return dict(meals), {k: round(v, 1) for k, v in totals.items()}
+
+
 # ---------------- 查询功能 ----------------
 
 def list_exercises(category=None):

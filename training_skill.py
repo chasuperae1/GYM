@@ -27,7 +27,10 @@ import sys
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
-from fitness_tool import add_workout, add_set, add_measurement, list_exercises, print_workout
+from fitness_tool import (
+    add_workout, add_set, add_measurement, list_exercises,
+    add_meal, add_meal_item, list_foods, get_daily_nutrition
+)
 
 class TrainingSkill:
     def __init__(self):
@@ -44,11 +47,14 @@ class TrainingSkill:
         self.workout_id = None
         self.start_time = None
         self.exercises = {}
-        self.load_exercises()
+        self.foods = {}
+        self.load_data()
     
-    def load_exercises(self):
+    def load_data(self):
         for e in list_exercises():
             self.exercises[e["name"]] = e["category"]
+        for f in list_foods():
+            self.foods[f["name"]] = {k: v for k, v in f.items()}
     
     def parse_set_input(self, text):
         text = text.strip()
@@ -144,6 +150,22 @@ class TrainingSkill:
             
             return "\n".join(results)
         
+        if message.startswith("我吃了") or message.startswith("吃了"):
+            return self.record_meal(message)
+        
+        if message == "记录饮食":
+            self.state = "recording_meal"
+            return "好的！请告诉我吃了什么（格式: 食物名XX克 食物名XX克），例如：鸡胸肉100克 米饭200克"
+        
+        if self.state == "recording_meal":
+            if message == "完成":
+                self.state = "idle"
+                return "✅ 饮食记录完成！"
+            return self.record_meal(message)
+        
+        if message == "今日饮食":
+            return self.show_today_nutrition()
+        
         if message == "训练结束":
             return "还没有开始训练呢，请先输入「开始今天训练」"
         
@@ -212,6 +234,112 @@ class TrainingSkill:
         self.sync_to_github()
         self.reset()
         return "✅ 身体数据已更新！"
+    
+    def record_meal(self, message):
+        """记录饮食"""
+        text = message.replace("我吃了", "").replace("吃了", "").strip()
+        items = []
+        
+        foods_list = list(self.foods.keys())
+        remaining = text
+        
+        while remaining:
+            matched = False
+            for food_name in foods_list:
+                if remaining.startswith(food_name):
+                    remaining = remaining[len(food_name):].strip()
+                    
+                    import re
+                    match = re.match(r"(\d+\.?\d*)(g|克)", remaining)
+                    if match:
+                        quantity = float(match.group(1))
+                        remaining = remaining[match.end():].strip()
+                    else:
+                        quantity = 100
+                        remaining = ""
+                    
+                    items.append({"name": food_name, "quantity": quantity})
+                    matched = True
+                    break
+            
+            if not matched:
+                break
+        
+        if not items:
+            return "❌ 未识别到食物，请使用格式：食物名XX克\n示例：鸡胸肉100克 米饭200克"
+        
+        meal_id = add_meal()
+        
+        total_carbs = 0
+        total_protein = 0
+        total_fat = 0
+        total_calories = 0
+        food_list = []
+        
+        for item in items:
+            food_name = item["name"]
+            quantity = item["quantity"]
+            
+            if food_name not in self.foods:
+                return f"❌ 未找到食物「{food_name}」，请先告诉我它的营养成分"
+            
+            food_info = self.foods[food_name]
+            add_meal_item(meal_id, food_name, quantity)
+            
+            carbs = (food_info["carbs_g"] * quantity) / 100
+            protein = (food_info["protein_g"] * quantity) / 100
+            fat = (food_info["fat_g"] * quantity) / 100
+            calories = (food_info["calories"] * quantity) / 100
+            
+            total_carbs += carbs
+            total_protein += protein
+            total_fat += fat
+            total_calories += calories
+            
+            food_list.append(f"{food_name}{quantity}g")
+        
+        self.sync_to_github()
+        meal_type = self.get_meal_type()
+        
+        return (f"✅ 已记录{meal_type}：{' + '.join(food_list)}\n"
+                f"   营养: 碳水{round(total_carbs,1)}g 蛋白质{round(total_protein,1)}g "
+                f"脂肪{round(total_fat,1)}g 热量{round(total_calories,0)}kcal")
+    
+    def get_meal_type(self):
+        hour = datetime.now().hour
+        if 6 <= hour < 10:
+            return "早餐"
+        elif 10 <= hour < 14:
+            return "午餐"
+        elif 14 <= hour < 18:
+            return "下午茶"
+        elif 18 <= hour < 22:
+            return "晚餐"
+        else:
+            return "宵夜"
+    
+    def show_today_nutrition(self):
+        """显示今日营养摄入"""
+        meals, totals = get_daily_nutrition()
+        
+        if not meals:
+            return "📊 今日还没有饮食记录"
+        
+        result = "📊 今日营养摄入\n"
+        result += "-" * 40 + "\n"
+        
+        for meal_time, items in meals.items():
+            result += f"\n🍽️ {meal_time}\n"
+            for item in items:
+                result += f"   {item['food']} {item['quantity']}g\n"
+        
+        result += "\n📈 今日总计:\n"
+        result += f"   碳水: {totals['carbs']}g\n"
+        result += f"   蛋白质: {totals['protein']}g\n"
+        result += f"   脂肪: {totals['fat']}g\n"
+        result += f"   热量: {totals['calories']}kcal"
+        
+        return result
         
 
 def print_workout_str(workout_id):
