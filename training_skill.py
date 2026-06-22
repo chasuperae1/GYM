@@ -191,6 +191,20 @@ class TrainingSkill:
         """自动同步数据库到 GitHub"""
         try:
             import subprocess
+            
+            subprocess.run(
+                ["git", "config", "user.email", "trae@example.com"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            subprocess.run(
+                ["git", "config", "user.name", "TRAE"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            
             result = subprocess.run(
                 ["git", "add", "fitness.db"],
                 capture_output=True,
@@ -201,7 +215,7 @@ class TrainingSkill:
                 return f"⚠️  Git add 失败: {result.stderr}"
             
             result = subprocess.run(
-                ["git", "commit", "-m", f"训练记录: {self.workout_data['date']} {self.workout_data['split']}"],
+                ["git", "-c", "trae.coauthor=false", "commit", "-m", f"训练记录: {self.workout_data['date']} {self.workout_data['split']}"],
                 capture_output=True,
                 text=True,
                 timeout=30,
