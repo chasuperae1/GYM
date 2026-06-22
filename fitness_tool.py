@@ -346,6 +346,20 @@ def print_progress(exercise_name, limit=8):
         print(f"   {r['workout_date']:<12} {r['top_weight']:>10.1f}kg {r['top_reps']:>10} {r['total_volume']:>10.0f}kg")
 
 
+def add_training_cycle(name, start_date, end_date, goal, notes=""):
+    """添加训练周期计划"""
+    conn = _connect()
+    cur = conn.cursor()
+    cur.execute(
+        "INSERT INTO training_cycles (cycle_name, start_date, end_date, target, notes, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (name, start_date, end_date, goal, notes, datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+    )
+    conn.commit()
+    cycle_id = cur.lastrowid
+    conn.close()
+    return cycle_id
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "exercises":
